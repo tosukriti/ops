@@ -28,11 +28,32 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), req);
     }
 
-    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
-    public ResponseEntity<ApiError> handleValidation(Exception ex, HttpServletRequest req) {
-        String msg = "Validation failed";
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiError> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
+                                                                 HttpServletRequest req) {
+
+        String msg = ex.getBindingResult().getFieldErrors().stream()
+                .map(err -> err.getField() + ": " + err.getDefaultMessage())
+                .reduce((a, b) -> a + "; " + b)
+                .orElseGet(() -> ex.getBindingResult().getAllErrors().stream()
+                        .map(err -> err.getDefaultMessage())
+                        .reduce((a, b) -> a + "; " + b)
+                        .orElse("Validation failed"));
+
         return build(HttpStatus.BAD_REQUEST, msg, req);
     }
+
+    @ExceptionHandler(BindException.class)
+    public ResponseEntity<ApiError> handleBindException(BindException ex, HttpServletRequest req) {
+
+        String msg = ex.getBindingResult().getFieldErrors().stream()
+                .map(err -> err.getField() + ": " + err.getDefaultMessage())
+                .reduce((a, b) -> a + "; " + b)
+                .orElse("Validation failed");
+
+        return build(HttpStatus.BAD_REQUEST, msg, req);
+    }
+
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleOther(Exception ex, HttpServletRequest req) {
