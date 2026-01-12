@@ -1,4 +1,4 @@
-# Order Processing System (Spring Boot)
+# Order Processing System (Spring Boot) - Using AI
 
 A production-style backend for managing e-commerce orders: create, retrieve, list, update status, cancel, and auto-promote PENDING orders to PROCESSING via a scheduler.
 
