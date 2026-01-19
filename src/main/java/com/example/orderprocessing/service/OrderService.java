@@ -4,6 +4,7 @@ import com.example.orderprocessing.dto.*;
 import com.example.orderprocessing.entity.Order;
 import com.example.orderprocessing.entity.OrderItem;
 import com.example.orderprocessing.entity.OrderStatus;
+import com.example.orderprocessing.entity.ProductSnapshot;
 import com.example.orderprocessing.exception.ConflictException;
 import com.example.orderprocessing.exception.NotFoundException;
 import com.example.orderprocessing.repository.OrderRepository;
@@ -28,7 +29,12 @@ public class OrderService {
 
         for (OrderItemRequest itemReq : request.items()) {
             OrderItem item = new OrderItem();
-            item.setProductId(itemReq.productId());
+            item.setProduct(new ProductSnapshot(
+                    itemReq.productId(),
+                    "UNKNOWN",  // or fetch from product service/catalog
+                    null,
+                    null
+            ));
             item.setQuantity(itemReq.quantity());
             item.setUnitPrice(itemReq.unitPrice());
             order.addItem(item);
