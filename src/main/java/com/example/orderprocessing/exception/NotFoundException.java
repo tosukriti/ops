@@ -1,5 +1,9 @@
 package com.example.orderprocessing.exception;
 
-public class NotFoundException extends RuntimeException {
-    public NotFoundException(String message) { super(message); }
+import org.springframework.http.HttpStatus;
+
+public class NotFoundException extends DomainException {
+    public NotFoundException(String message) {
+        super(HttpStatus.NOT_FOUND, UiCode.RESOURCE_NOT_FOUND, message);
+    }
 }

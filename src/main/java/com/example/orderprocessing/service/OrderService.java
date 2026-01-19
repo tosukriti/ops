@@ -5,8 +5,9 @@ import com.example.orderprocessing.entity.Order;
 import com.example.orderprocessing.entity.OrderItem;
 import com.example.orderprocessing.entity.OrderStatus;
 import com.example.orderprocessing.entity.ProductSnapshot;
-import com.example.orderprocessing.exception.ConflictException;
-import com.example.orderprocessing.exception.NotFoundException;
+import com.example.orderprocessing.exception.CancelNotAllowedException;
+import com.example.orderprocessing.exception.InvalidOrderTransitionException;
+import com.example.orderprocessing.exception.OrderNotFoundException;
 import com.example.orderprocessing.repository.OrderRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
@@ -31,7 +32,7 @@ public class OrderService {
             OrderItem item = new OrderItem();
             item.setProduct(new ProductSnapshot(
                     itemReq.productId(),
-                    "UNKNOWN",  // or fetch from product service/catalog
+                    "UNKNOWN",  // later: fetch from product catalog
                     null,
                     null
             ));
@@ -47,7 +48,7 @@ public class OrderService {
     @Transactional
     public OrderResponse getOrder(UUID orderId) {
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new NotFoundException("Order not found: " + orderId));
+                .orElseThrow(() -> new OrderNotFoundException(orderId.toString()));
         return toResponse(order);
     }
 
@@ -63,12 +64,14 @@ public class OrderService {
     @Transactional
     public OrderResponse updateStatus(UUID orderId, OrderStatus newStatus) {
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new NotFoundException("Order not found: " + orderId));
+                .orElseThrow(() -> new OrderNotFoundException(orderId.toString()));
 
         OrderStatus current = order.getStatus();
 
         if (!isAllowedTransition(current, newStatus)) {
-            throw new ConflictException("Invalid status transition: " + current + " -> " + newStatus);
+            throw new InvalidOrderTransitionException(
+                    "Invalid status transition: " + current + " -> " + newStatus
+            );
         }
 
         order.setStatus(newStatus);
@@ -79,10 +82,10 @@ public class OrderService {
     @Transactional
     public OrderResponse cancel(UUID orderId) {
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new NotFoundException("Order not found: " + orderId));
+                .orElseThrow(() -> new OrderNotFoundException(orderId.toString()));
 
         if (order.getStatus() != OrderStatus.PENDING) {
-            throw new ConflictException("Order can be cancelled only in PENDING status");
+            throw new CancelNotAllowedException("Order can be cancelled only in PENDING status");
         }
 
         order.setStatus(OrderStatus.CANCELLED);
@@ -95,7 +98,7 @@ public class OrderService {
         }
 
         return switch (current) {
-            case PENDING -> next == OrderStatus.PROCESSING;     // cancellation handled separately
+            case PENDING -> next == OrderStatus.PROCESSING; // cancel handled separately
             case PROCESSING -> next == OrderStatus.SHIPPED;
             case SHIPPED -> next == OrderStatus.DELIVERED;
             default -> false;
@@ -104,7 +107,12 @@ public class OrderService {
 
     private OrderResponse toResponse(Order order) {
         List<OrderItemResponse> items = order.getItems().stream()
-                .map(i -> new OrderItemResponse(i.getId(), i.getProductId(), i.getQuantity(), i.getUnitPrice()))
+                .map(i -> new OrderItemResponse(
+                        i.getId(),
+                        i.getProductId(), // comes from ProductSnapshot convenience getter
+                        i.getQuantity(),
+                        i.getUnitPrice()
+                ))
                 .toList();
 
         return new OrderResponse(

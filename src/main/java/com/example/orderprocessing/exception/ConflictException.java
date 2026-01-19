@@ -1,5 +1,9 @@
 package com.example.orderprocessing.exception;
 
-public class ConflictException extends RuntimeException {
-    public ConflictException(String message) { super(message); }
+import org.springframework.http.HttpStatus;
+
+public class ConflictException extends DomainException {
+    public ConflictException(String message) {
+        super(HttpStatus.CONFLICT, UiCode.CONFLICT, message);
+    }
 }

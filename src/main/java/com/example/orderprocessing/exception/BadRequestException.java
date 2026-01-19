@@ -1,5 +1,9 @@
 package com.example.orderprocessing.exception;
 
-public class BadRequestException extends RuntimeException {
-    public BadRequestException(String message) { super(message); }
+import org.springframework.http.HttpStatus;
+
+public class BadRequestException extends DomainException {
+    public BadRequestException(String message) {
+        super(HttpStatus.BAD_REQUEST, UiCode.INVALID_REQUEST, message);
+    }
 }

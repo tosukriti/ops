@@ -4,7 +4,8 @@ import com.example.orderprocessing.dto.CreateOrderRequest;
 import com.example.orderprocessing.dto.OrderItemRequest;
 import com.example.orderprocessing.entity.Order;
 import com.example.orderprocessing.entity.OrderStatus;
-import com.example.orderprocessing.exception.ConflictException;
+import com.example.orderprocessing.exception.CancelNotAllowedException;
+import com.example.orderprocessing.exception.InvalidOrderTransitionException;
 import com.example.orderprocessing.repository.OrderRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -24,27 +25,21 @@ class OrderServiceTest {
         OrderRepository repo = mock(OrderRepository.class);
         OrderService service = new OrderService(repo);
 
-        // Simulate what JPA @PrePersist would do (because unit tests don't trigger it)
+        // Simulate what JPA @PrePersist would do (unit tests don't trigger it)
         when(repo.save(any(Order.class))).thenAnswer(inv -> {
             Order o = inv.getArgument(0);
 
-            // Mimic @PrePersist behavior
-            if (o.getId() == null) {
-                // If your Order class has no setId(), we just keep it null and change assertions below.
-                // But most likely you DO have ID field, just no setter.
-                // We'll set via reflection as a pure test-side fix.
-                try {
-                    var idField = Order.class.getDeclaredField("id");
-                    idField.setAccessible(true);
-                    idField.set(o, UUID.randomUUID());
-                } catch (Exception ignored) {
-                    // If reflection fails, we'll let assertions avoid id check
-                }
-            }
-
+            // Mimic @PrePersist behavior for status at least
             if (o.getStatus() == null) {
                 o.setStatus(OrderStatus.PENDING);
             }
+
+            // Optional ID reflect set (if you rely on it somewhere)
+            try {
+                var idField = Order.class.getDeclaredField("id");
+                idField.setAccessible(true);
+                if (idField.get(o) == null) idField.set(o, UUID.randomUUID());
+            } catch (Exception ignored) {}
 
             return o;
         });
@@ -55,11 +50,11 @@ class OrderServiceTest {
 
         var resp = service.createOrder(req);
 
-        // If reflection succeeded, ID will be non-null. If not, this assertion can fail.
-        // To keep test robust, assert on repository interaction + items + status.
         assertNotNull(resp);
         assertEquals(OrderStatus.PENDING, resp.status());
         assertEquals(1, resp.items().size());
+
+        // Response should still show SKU via snapshot
         assertEquals("SKU-1", resp.items().get(0).productId());
         assertEquals(2, resp.items().get(0).quantity());
         assertEquals(new BigDecimal("10.00"), resp.items().get(0).unitPrice());
@@ -71,13 +66,16 @@ class OrderServiceTest {
         Order saved = captor.getValue();
         assertNotNull(saved);
         assertEquals(1, saved.getItems().size());
-        assertEquals("SKU-1", saved.getItems().get(0).getProductId());
-        assertEquals(2, saved.getItems().get(0).getQuantity());
-        assertEquals(new BigDecimal("10.00"), saved.getItems().get(0).getUnitPrice());
 
-        // Optional: if reflection worked, OrderResponse id should be present
-        // (comment out if it still fails due to strong encapsulation)
-        // assertNotNull(resp.id());
+        var savedItem = saved.getItems().get(0);
+
+        // Product id comes from snapshot now
+        assertEquals("SKU-1", savedItem.getProductId());
+        assertNotNull(savedItem.getProduct());
+        assertEquals("SKU-1", savedItem.getProduct().getProductId());
+
+        assertEquals(2, savedItem.getQuantity());
+        assertEquals(new BigDecimal("10.00"), savedItem.getUnitPrice());
     }
 
     @Test
@@ -91,7 +89,9 @@ class OrderServiceTest {
 
         when(repo.findById(id)).thenReturn(Optional.of(o));
 
-        assertThrows(ConflictException.class, () -> service.updateStatus(id, OrderStatus.SHIPPED));
+        assertThrows(InvalidOrderTransitionException.class,
+                () -> service.updateStatus(id, OrderStatus.SHIPPED));
+
         verify(repo, never()).save(any());
     }
 
@@ -106,6 +106,6 @@ class OrderServiceTest {
 
         when(repo.findById(id)).thenReturn(Optional.of(o));
 
-        assertThrows(ConflictException.class, () -> service.cancel(id));
+        assertThrows(CancelNotAllowedException.class, () -> service.cancel(id));
     }
 }
